@@ -123,7 +123,8 @@ class Tolvutek(object):
             discount_price = soup.find('div', 'price').contents[0][:-3],
             description = h.unescape(soup.find('div', 'boxinfo').contents[2]).strip(),
             add_to_cart_id = soup.find('input').attrs['value'],
-            image_url = leftsoup.find('a', attrs={'rel':'prettyPhoto'}).attrs['href'],            
+            image_url = leftsoup.find('a', attrs={'rel':'prettyPhoto'}).attrs['href'],
+            url = self.get_url(url)
             )    
         self.products[url] = product
         return product

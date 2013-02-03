@@ -132,6 +132,7 @@ class Tolvutek(object):
             except KeyError:
                 pass
         h = HTMLParser()
+        url = self.get_url(url)
         soup = self.get_soup(url)
         leftsoup = soup.find('div', 'leftcontent')
         soup = soup.find('div', 'rightcontent')

@@ -60,6 +60,13 @@ class Builder(object):
         socks.remove('kaelikrem')
         return socks
 
+    def get_ram_types(self):
+        """
+        Get available ram types.
+        """
+        rams = self.api.cats['tolvuihlutir']['vinnsluminni-bordtolvur']
+        return rams
+
     def get_cpus(self, socket):
         return self.api.get_products('tolvuihlutir', 'orgjorvar', socket)
 

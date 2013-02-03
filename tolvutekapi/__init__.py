@@ -46,7 +46,7 @@ class Tolvutek(object):
     url_add_to_cart = u'/karfa/add_to_cart'
 
     def __init__(self, username=None, password=None):
-        self.login = self.get_login(username, password)
+        self.session = self.get_session(username, password)
         self.products = {} #url:Product dict
 
     def get_cart(self):
@@ -57,6 +57,9 @@ class Tolvutek(object):
         return self._extract_products(csoup, cart=True)
 
     def add_to_cart(self, product):
+        """
+        Add given product to cart.
+        """
         body = {'varaId':product.add_to_cart_id}
         resp = self.post(self.url_add_to_cart, body)
         if resp.code >= 300:
@@ -125,7 +128,7 @@ class Tolvutek(object):
         url = self.get_url(url)
         return BeautifulSoup(self._get_html(url, body=body))
 
-    def get_login(self, user, pw):
+    def get_session(self, user, pw):
         """
         Get the session urlopener.
         """
@@ -143,7 +146,7 @@ class Tolvutek(object):
         """
         url = self.get_url(url)
         body = urlencode(body)
-        response = self.login.open(url, body)
+        response = self.session.open(url, body)
         return response
         
     def get_url(self, url):
@@ -174,7 +177,7 @@ class Tolvutek(object):
     def _get_html(self, url, body=None):
         if body is not None:
             body = urlencode(body)
-        html = self.login.open(url, body).read()
+        html = self.session.open(url, body).read()
         html = html.decode('utf-8', 'mixed')
         return html
 

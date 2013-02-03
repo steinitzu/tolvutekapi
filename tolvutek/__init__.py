@@ -65,6 +65,7 @@ class Tolvutek(object):
     url_cart = u'/karfa'
     url_add_to_cart = u'/karfa/add_to_cart'
     url_search = u'/leita'
+    url_asearch = u'/leit'
 
     def __init__(self, username=None, password=None):
         self.session = self.get_session(username, password)
@@ -79,6 +80,27 @@ class Tolvutek(object):
         query = quote(query)
         u = self.url_search+'/'+query
         soup = self.get_soup(u)
+        return self.get_products(soup=soup)
+
+    def advanced_search(self, **kwargs):
+        """
+        """
+        defs = {
+            'title':'',
+            'productnr':'',
+            'pricerange':'0+-+250.000',
+            'category':'',
+            'manufacture':''
+            }
+        for key, value in defs.iteritems():
+            if not kwargs.has_key(key):
+                kwargs[key] = value
+            elif not key == 'pricerange': #can't quote pricerange cause reasons
+                kwargs[key] = quote(kwargs[key])
+        url = '?title={title}&productNr={productnr}&pricerange={pricerange}&category={category}&manufacture={manufacture}'
+        url = url.format(**kwargs)
+        url = self.url_asearch+'/'+url
+        soup = self.get_soup(url)
         return self.get_products(soup=soup)
 
     def get_cart(self):
@@ -195,6 +217,7 @@ class Tolvutek(object):
         Get a BeautifulSoup object for given url and request body.
         """
         url = self.get_url(url)
+        log.debug(url)
         return BeautifulSoup(self._get_html(url, body=body))
 
     def get_session(self, user, pw):

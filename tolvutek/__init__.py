@@ -134,7 +134,7 @@ class Tolvutek(object):
         for page in pages[1:]:
             soup = self.get_soup(self.url_base+page.attrs['href'])
             ps = self._extract_products(soup)
-            products.update(ps)
+            products += ps
         return products
         
 
@@ -184,11 +184,11 @@ class Tolvutek(object):
             product_soups = soup.findAll('div', 'details')
         else:
             product_soups = soup.findAll('div', attrs={'class':'box-middle'})
-        products = {}
+        products = []
         for s in product_soups:
             purl = s.find('a').attrs['href']
             prod = self.get_product(purl)
-            products[prod.catalog_no] = prod
+            products.append(prod)
         return products
 
     def _get_html(self, url, body=None):

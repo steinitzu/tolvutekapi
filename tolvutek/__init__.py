@@ -16,7 +16,7 @@
 # included in all copies or substantial portions of the Software.
 
 import codecs
-from urllib import urlencode
+from urllib import urlencode, quote
 from cookielib import CookieJar
 from urllib2 import build_opener, HTTPCookieProcessor
 import logging
@@ -61,10 +61,22 @@ class Tolvutek(object):
     url_login = u'/login/loginsubmit'
     url_cart = u'/karfa'
     url_add_to_cart = u'/karfa/add_to_cart'
+    url_search = u'/leita'
 
     def __init__(self, username=None, password=None):
         self.session = self.get_session(username, password)
         self.products = {} #url:Product dict
+        self.cats = self.get_categories()
+        
+    def search(self, query):
+        """
+        Search for products matching query.
+        Returns a list of Product.
+        """
+        query = quote(query)
+        u = self.url_search+'/'+query
+        soup = self.get_soup(u)
+        return self.get_products(soup=soup)
 
     def get_cart(self):
         """
@@ -113,17 +125,19 @@ class Tolvutek(object):
         self.products[url] = product
         return product
 
-    def get_products(self, cat, subcat, subsubcat=None):
+    def get_products(self, cat=None, subcat=None, subsubcat=None, soup=None):
         """
         Get all products in given category and subcategory.
+        Can also take a `BeautifulSoup` of a products page.
         """
-        u = u'/{}/{}'.format(cat,subcat)
-        if subsubcat:
-            u+=u'/'+subsubcat
-        u+=u'?'
-        url = self.url_base+self.url_product_base+u
-        log.debug(u'product url: %s', url)
-        soup = self.get_soup(url)
+        if not soup:
+            u = u'/{}/{}'.format(cat,subcat)
+            if subsubcat:
+                u+=u'/'+subsubcat
+            u+=u'?'
+            url = self.url_base+self.url_product_base+u
+            log.debug(u'product url: %s', url)
+            soup = self.get_soup(url)
         pages = soup.find('div', 'paginationControl')
         if not pages:
             return self._extract_products(soup)            
@@ -136,7 +150,43 @@ class Tolvutek(object):
             ps = self._extract_products(soup)
             products += ps
         return products
-        
+
+    def get_categories(self):
+        """
+        Get all product categories, sub categories and sub-sub categories.
+        {'cat':{'subcat':['subsubcats'], 'subcat2':['subsubcats']}
+        """
+        def stripurl(url):
+            log.debug(url)
+            return url.strip('/vorur/').strip('?')
+        soup = self.get_soup(self.url_base)
+        catsoup = soup.find('ul', attrs={'id':'valmynd'})
+
+        #all the <li class=''> trees in a list
+        catsoups = [catsoup.findNext('li', '')]
+        catsoups+= catsoups[0].fetchNextSiblings()
+
+        cats = {}
+
+        for cat in catsoups:
+            catname = stripurl(cat.findNext('a').attrs['href'])
+            subsoup = cat.find('ul', 'submenu')
+            subcats = {}
+            for href in subsoup.findAll('a'):
+                log.debug(href)
+                href = stripurl(href.attrs['href'])
+                cubs = href.split('/')
+                subcat = cubs[1]
+                if len(cubs) == 3:
+                    subsubcat = cubs[2]
+                else:
+                    subsubcat = None
+                if not subcats.has_key(subcat):
+                    subcats[subcat] = []
+                if subsubcat:
+                    subcats[subcat].append(subsubcat)
+            cats[catname] = subcats
+        return cats                
 
     def get_soup(self, url, body=None):
         """

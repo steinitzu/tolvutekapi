@@ -54,6 +54,9 @@ class Product(object):
             )
         return s.encode('utf-8')
 
+    def __unicode__(self):
+        return str(self).decode('utf-8')
+
 class Tolvutek(object):
 
     url_base = u'http://tolvutek.is'
@@ -157,7 +160,6 @@ class Tolvutek(object):
         {'cat':{'subcat':['subsubcats'], 'subcat2':['subsubcats']}
         """
         def stripurl(url):
-            log.debug(url)
             return url.strip('/vorur/').strip('?')
         soup = self.get_soup(self.url_base)
         catsoup = soup.find('ul', attrs={'id':'valmynd'})
@@ -173,7 +175,6 @@ class Tolvutek(object):
             subsoup = cat.find('ul', 'submenu')
             subcats = {}
             for href in subsoup.findAll('a'):
-                log.debug(href)
                 href = stripurl(href.attrs['href'])
                 cubs = href.split('/')
                 subcat = cubs[1]

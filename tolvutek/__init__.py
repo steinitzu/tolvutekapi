@@ -68,6 +68,7 @@ class Tolvutek(object):
     url_asearch = u'/leit'
 
     def __init__(self, username=None, password=None):
+        self.soup_cache = {} #url:BeautifulSoup
         self.session = self.get_session(username, password)
         self.products = {} #url:Product dict
         self.cats = self.get_categories()
@@ -152,10 +153,19 @@ class Tolvutek(object):
         self.products[url] = product
         return product
 
-    def get_products(self, cat=None, subcat=None, subsubcat=None, soup=None):
+    def get_products(
+        self,
+        cat=None,
+        subcat=None,
+        subsubcat=None, 
+        soup=None,
+        just_names=False
+        ):
         """
-        Get all products in given category and subcategory.
+        Get all products in given category and subcategory as a list.
         Can also take a `BeautifulSoup` of a products page.
+        If `just_names`, returnes a dict {'productname':'url'}. 
+        Individual products will then not be scraped.
         """
         if not soup:
             u = u'/{}/{}'.format(cat,subcat)
@@ -167,15 +177,18 @@ class Tolvutek(object):
             soup = self.get_soup(url)
         pages = soup.find('div', 'paginationControl')
         if not pages:
-            return self._extract_products(soup)            
+            return self._extract_products(soup, just_names=just_names)            
         pages = pages.findAll('a')
         #strip the garbage links
         pages = pages[2:-2]
-        products = self._extract_products(soup)        
+        products = self._extract_products(soup, just_names=just_names)        
         for page in pages[1:]:
             soup = self.get_soup(self.url_base+page.attrs['href'])
-            ps = self._extract_products(soup)
-            products += ps
+            ps = self._extract_products(soup, just_names=just_names)
+            if just_names:
+                products.update(ps)
+            else:
+                products += ps
         return products
 
     def get_categories(self):
@@ -213,13 +226,20 @@ class Tolvutek(object):
             cats[catname] = subcats
         return cats                
 
-    def get_soup(self, url, body=None):
+    def get_soup(self, url, body=None, use_cache=True):
         """
         Get a BeautifulSoup object for given url and request body.
         """
         url = self.get_url(url)
         log.debug(url)
-        return BeautifulSoup(self._get_html(url, body=body))
+        if use_cache:
+            try:
+                return self.soup_cache[url]
+            except KeyError:
+                pass        
+        soup = BeautifulSoup(self._get_html(url, body=body))
+        self.soup_cache[url] = soup
+        return soup
 
     def get_session(self, user, pw):
         """
@@ -251,18 +271,27 @@ class Tolvutek(object):
         return url
         
 
-    def _extract_products(self, soup, cart=False):
+    def _extract_products(self, soup, cart=False, just_names=False):
         """
         Get products from given BeautifulSoup.
         Set `cart` to True if `soup` is a cart.
+
+        If `just_names`, returns a dict {'productname':'url'}.
         """
         if cart:
             product_soups = soup.findAll('div', 'details')
         else:
             product_soups = soup.findAll('div', attrs={'class':'box-middle'})
-        products = []
+        if just_names:
+            products = {}
+        else:
+            products = []
         for s in product_soups:
             purl = s.find('a').attrs['href']
+            if just_names:
+                name = s.findAll('a')[1].contents[0].strip()
+                products[name] = purl
+                continue
             prod = self.get_product(purl)
             products.append(prod)
         return products

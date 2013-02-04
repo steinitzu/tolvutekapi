@@ -23,6 +23,8 @@ from urllib2 import build_opener, HTTPCookieProcessor
 import logging
 from HTMLParser import HTMLParser
 
+import mechanize
+
 from bs4 import BeautifulSoup
 
 def get_log():
@@ -118,7 +120,7 @@ class Tolvutek(object):
         """
         Get products in cart for given session.
         """
-        csoup = self.get_soup(self.url_cart)
+        csoup = self.get_soup(self.url_cart, use_cache=False)
         return self._extract_products(csoup, cart=True)
 
     def add_to_cart(self, product):
@@ -277,6 +279,7 @@ class Tolvutek(object):
             {'username':user,'password':pw}
             )
         opener.open(self.url_base+self.url_login, data)
+        self.cookie = cj._cookies['tolvutek.is']['/']['PHPSESSID']        
         return opener
 
     def post(self, url, body):

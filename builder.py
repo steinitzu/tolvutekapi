@@ -18,10 +18,26 @@
 import getpass
 import logging
 import re
+import os
+import shelve
 
 from tolvutek import Tolvutek, TolvutekError
 
 log = logging.getLogger('tolvutek')
+
+def safe_make_dirs(path):
+    """
+    _safe_make_dirs(path)
+    os.makedir but suppresses errors when dir already exists.
+    All other errors are raised as normal.
+    """
+    try:
+        os.makedirs(path)
+    except OSError as e:
+        if e.errno == 17: #file exists
+            pass
+        else:
+            raise
 
 class BuildItem(object):
     def __init__(self, product, quantity):
@@ -31,18 +47,19 @@ class BuildItem(object):
 
 class Builder(object):
     
-    def __init__(self, ttuser, ttpassword):
+    def __init__(self, ttuser, ttpassword, bdir=None):
         self.api = Tolvutek(username=ttuser, password=ttpassword)
+        self.build = {}
+        if bdir and os.path.isdir(bdir):
+            if os.path.exists(os.path.join(bdir, 'build.shelf')):
+                self.read_shelf(os.path.join(bdir, 'build.shelf'))
+        self.builddir = bdir
 
-        self.build = {
-            'cpu':None,
-            'motherboard':None,
-            'storage':None,
-            'memory':None,
-            'case':None,
-            'psu':None,
-            'os':None,
-            }
+    def read_shelf(self, shelff):
+        s = shelve.open(shelff)
+        for key, value in s.iteritems():
+            self.build[key] = self.api.get_product(value)
+        s.close()
 
     def get_operating_systems(self):
         """
@@ -127,9 +144,9 @@ class Builder(object):
         self.api.sort_products(newdrives)
         return newdrives
 
-    def write_build(self, fn, format='txt'):
+    def _build_to_text(self):
         """
-        Write `self.build` to file in given format.
+        Get text representation of build.
         """
         t = u''
         total = 0
@@ -143,19 +160,40 @@ class Builder(object):
             t += line
             total+=prod.discount_price
             totalcommon+=prod.common_price
+        t += '\n'
         t += u'Heildarverð:{}\n'.format(total)
-        t += u'Almennt verð:{}\n'.format(totalcommon)            
-        f = open(fn, 'w')
-        f.write(t.encode('utf-8'))
-        f.close()        
+        t += u'Almennt verð:{}\n'.format(totalcommon)
+        return t
+
+    def write_build(self, bdir):
+        """
+        Write `self.build` to file in given format.
+        """
+        pj = os.path.join
+        bdir = os.path.abspath(bdir)
+        safe_make_dirs(bdir)
+        textf = pj(bdir, 'build.txt')
+        shelf = shelve.open(pj(bdir,'build.shelf'))
+
+        #write text file
+        text = self._build_to_text()
+        f = open(textf, 'w')
+        f.write(text.encode('utf-8'))
+        f.close()     
+
+        #write shelf
+        for key, value in self.build.iteritems():
+            shelf[key] = value.url
+        shelf.sync()
+        shelf.close()
 
 class BuilderUI(object):
 
-    def __init__(self, ttuser=None, ttpassword=None):
+    def __init__(self, ttuser=None, ttpassword=None, bdir=None):
         if not ttuser or not ttpassword:
             ttuser = raw_input('Notendanafn: ')
             ttpassword = getpass.getpass()
-        self.builder = Builder(ttuser, ttpassword)
+        self.builder = Builder(ttuser, ttpassword, bdir=bdir)
         self.build = self.builder.build
 
     def choice(self, question, options, detailsfunc=None, returninput=False):
@@ -250,7 +288,7 @@ class BuilderUI(object):
             detailsfunc=detailsfunc
             )
 
-        self.builder.write_build('/tmp/build.txt')
+        self.builder.write_build(self.builder.builddir)
         
         
 if __name__ == '__main__':

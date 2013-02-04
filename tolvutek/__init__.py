@@ -16,6 +16,7 @@
 # included in all copies or substantial portions of the Software.
 
 import codecs
+import operator
 from urllib import urlencode, quote
 from cookielib import CookieJar
 from urllib2 import build_opener, HTTPCookieProcessor
@@ -40,7 +41,8 @@ class TolvutekError(Exception):
     pass
 
 class Product(object): 
-    def __init__(self, **kwargs):
+    def __init__(self, api=None, **kwargs):
+        self.api = api
         for key,value in kwargs.iteritems():
             if key == 'common_price' or key == 'discount_price':
                 value = int(value.replace('.',''))
@@ -56,6 +58,14 @@ class Product(object):
 
     def __unicode__(self):
         return str(self).decode('utf-8')
+
+
+    def __getattribute__(self, attr):
+        try:
+            return super(Product, self).__getattribute__(attr)
+        except AttributeError:
+            self.api.fill_product(self)
+        return super(Product, self).__getattribute__(attr)                    
 
 class Tolvutek(object):
 
@@ -121,7 +131,14 @@ class Tolvutek(object):
             raise TolvutekError(
                 u'Error occured when adding {} to cart. HTTP code: {}'.format(
                     product, resp.code)
-                )        
+                )
+
+    def fill_product(self, product):
+        """
+        Fill given product with info from web.
+        """
+        newp = self.get_product(product.url)
+        product.__dict__.update(newp.__dict__)
 
     def get_product(self, url, usecache=True):
         """
@@ -140,6 +157,7 @@ class Tolvutek(object):
         info = soup.findAll('span', 'modelnr')
 
         product = Product(
+            api=self,
             model_no = h.unescape(info[0].contents[0])[len('typunumer: '):],
             catalog_no = h.unescape(info[1].contents[0])[len('Vorunumer: '):],
             common_price = info[2].contents[0][len('agv: '):-3],
@@ -159,7 +177,7 @@ class Tolvutek(object):
         subcat=None,
         subsubcat=None, 
         soup=None,
-        just_names=False
+        quick=True
         ):
         """
         Get all products in given category and subcategory as a list.
@@ -177,19 +195,27 @@ class Tolvutek(object):
             soup = self.get_soup(url)
         pages = soup.find('div', 'paginationControl')
         if not pages:
-            return self._extract_products(soup, just_names=just_names)            
+            products = self._extract_products(
+                soup, quick=quick
+                )
+            self.sort_products(products)
+            return products
         pages = pages.findAll('a')
         #strip the garbage links
         pages = pages[2:-2]
-        products = self._extract_products(soup, just_names=just_names)        
+        products = self._extract_products(soup, quick=quick)        
         for page in pages[1:]:
             soup = self.get_soup(self.url_base+page.attrs['href'])
-            ps = self._extract_products(soup, just_names=just_names)
-            if just_names:
-                products.update(ps)
-            else:
-                products += ps
+            ps = self._extract_products(soup, quick=quick)
+            products += ps
+        self.sort_products(products)
         return products
+
+    def sort_products(self, products, field='discount_price'):
+        """
+        Sort given product list by given field.
+        """
+        products.sort(key=operator.attrgetter(field))        
 
     def get_categories(self):
         """
@@ -268,10 +294,9 @@ class Tolvutek(object):
         """
         if not url.startswith(self.url_base):
             url = self.url_base+url
-        return url
-        
+        return url        
 
-    def _extract_products(self, soup, cart=False, just_names=False):
+    def _extract_products(self, soup, cart=False, quick=False):
         """
         Get products from given BeautifulSoup.
         Set `cart` to True if `soup` is a cart.
@@ -282,17 +307,17 @@ class Tolvutek(object):
             product_soups = soup.findAll('div', 'details')
         else:
             product_soups = soup.findAll('div', attrs={'class':'box-middle'})
-        if just_names:
-            products = {}
-        else:
-            products = []
+        products = []
         for s in product_soups:
             purl = s.find('a').attrs['href']
-            if just_names:
+            if quick:
                 name = s.findAll('a')[1].contents[0].strip()
-                products[name] = purl
-                continue
-            prod = self.get_product(purl)
+                price = s.find('div', 'price').contents[0]
+                prod = Product(
+                    api=self, name=name, discount_price=price, url=purl
+                    )
+            else:
+                prod = self.get_product(purl)
             products.append(prod)
         return products
 

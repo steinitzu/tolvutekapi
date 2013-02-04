@@ -127,6 +127,27 @@ class Builder(object):
         self.api.sort_products(newdrives)
         return newdrives
 
+    def write_build(self, fn, format='txt'):
+        """
+        Write `self.build` to file in given format.
+        """
+        t = u''
+        total = 0
+        totalcommon = 0
+        for prod in self.build.itervalues():
+            if not prod: continue
+            self.api.fill_product(prod)
+            line = u'{name} - {discount_price} / {common_price} ({url})\n'.format(
+                **prod.__dict__
+                )
+            t += line
+            total+=prod.discount_price
+            totalcommon+=prod.common_price
+        t += u'Heildarverð:{}\n'.format(total)
+        t += u'Almennt verð:{}\n'.format(totalcommon)            
+        f = open(fn, 'w')
+        f.write(t.encode('utf-8'))
+        f.close()        
 
 class BuilderUI(object):
 
@@ -229,8 +250,7 @@ class BuilderUI(object):
             detailsfunc=detailsfunc
             )
 
-        
-
+        self.builder.write_build('/tmp/build.txt')
         
         
 if __name__ == '__main__':

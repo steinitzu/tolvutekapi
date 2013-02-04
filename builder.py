@@ -19,7 +19,7 @@ import getpass
 import logging
 import re
 
-from tolvutek import Tolvutek
+from tolvutek import Tolvutek, TolvutekError
 
 log = logging.getLogger('tolvutek')
 
@@ -67,11 +67,65 @@ class Builder(object):
         rams = self.api.cats['tolvuihlutir']['vinnsluminni-bordtolvur']
         return rams
 
+    def get_rams(self, ramtype, size=None):
+        """
+        Get all ram products matching `size` and `ram_type`. 
+        (e.g. 8 and ddr3 for all 8gb ddr3).
+        """
+        #jn = True if size else False
+        rams = self.api.get_products(
+            'tolvuihlutir', 'vinnsluminni-bordtolvur', ramtype
+            )
+        if not size:
+            return rams
+        newrams = []
+        ms = r'.+%sGB %s' % (size, ramtype)
+        for ram in rams:
+            if re.match(ms, ram.name, re.IGNORECASE):
+                newrams.append(ram)
+        self.api.sort_products(newrams)
+        return newrams
+
+    def get_mobo_ram_type(self, motherboard):
+        match = None
+        for ram in self.get_ram_types():
+            if ram.lower() in motherboard.description.lower():
+                if match == 'ddr' or not match:
+                    match = ram
+        if not match:
+            raise TolvutekError(
+                'No supported ram type found for: {}'.format(motherboard)
+                )
+        return match
+
     def get_cpus(self, socket):
         return self.api.get_products('tolvuihlutir', 'orgjorvar', socket)
 
     def get_motherboards(self, socket):
-        return self.api.get_products('tolvuihlutir', 'modurbord', socket)        
+        return self.api.get_products('tolvuihlutir', 'modurbord', socket)
+
+    def get_drives(self, drivetype, size=None):        
+        if drivetype == 'HDD':
+            overview = self.api.get_products(
+                'tolvuihlutir', 'hardir-diskar-35', 'sata3'
+                )
+        elif drivetype == 'SSD':
+            overview = self.api.get_products(
+                'tolvuihlutir', 'ssd-diskar', 'sata3'
+                )
+        else:
+            raise TolvutekError(
+                'drivetype argument must be "SSD" or "HDD"'
+                )
+        if not size:
+            return overview
+        ms = r'^%s.+' % size
+        newdrives = []
+        for drive in overview:
+            if re.match(ms, drive.name, re.IGNORECASE):
+                newdrives.append(drive)
+        self.api.sort_products(newdrives)
+        return newdrives
 
 
 class BuilderUI(object):
@@ -83,13 +137,19 @@ class BuilderUI(object):
         self.builder = Builder(ttuser, ttpassword)
         self.build = self.builder.build
 
-    def choice(self, question, options, detailsfunc=None):
+    def choice(self, question, options, detailsfunc=None, returninput=False):
         """
         Give a string `qeustion` and list of options.
         Prints the question and option to screen and returns 
         the user selected options.
         Objects in `options` can be anything, their __str__ represenation 
         will be given to the user.
+
+        `detailsfunc` is the function item is passed through 
+        when '?\d' option is selected.
+
+        if `returninput` is True, whatever the user enters is returned.
+        options will be ignored.
         """
         def dat(item): return item
         if not detailsfunc:
@@ -105,6 +165,8 @@ class BuilderUI(object):
         
         while True:
             selection = raw_input(q)
+            if returninput:
+                return selection
             r = re.match(r'^\?(?P<num>\d+)$', selection)
             if r:
                 sel = int(r.groupdict()['num'])
@@ -121,26 +183,56 @@ class BuilderUI(object):
 
     def do_build(self):
         def detailsfunc(item):
-            s = u'\n{}\n{}\n{}'.format(item, item.description, item.url)
+            s = u'\n{}/{} kr.\n{}\n{}'.format(
+                item, item.common_price, item.description, item.url)
             return s
         sockets = self.builder.get_sockets()
         socket = self.choice(
             'Veldu sökkul:', 
             sockets,
             )
-        cpu = self.choice(
+        b = self.build
+        b['cpu'] = self.choice(
             'Veldu örgjörva:', 
             self.builder.get_cpus(socket),
             detailsfunc=detailsfunc
             )
-        motherboard = self.choice(
+        b['motherboard'] = self.choice(
             'Veldu móðurborð',
             self.builder.get_motherboards(socket),
             detailsfunc=detailsfunc
             )
-        log.debug(cpu)
+        ramtype = self.builder.get_mobo_ram_type(b['motherboard'])
+        ramsize = self.choice(
+            'Hvað viltu mikið vinnsluminni (GB)?',
+            [],
+            returninput=True
+            )
+        rams = self.builder.get_rams(ramtype, ramsize)
+        b['ram'] = self.choice(
+            'Veldu vinnsluminni:',
+            rams,
+            detailsfunc=detailsfunc
+            )        
+        drivetype = self.choice(
+            'Hvernig disk viltu?',
+            ['HDD', 'SSD']
+            )
+        drivesize = self.choice(
+            'Hversu storann disk (t.d. 1TB eða 120GB)? (autt til að sjá alla).',
+            [],
+            returninput=True
+            )
+        b['storage'] = self.choice(
+            'Veldu disk:',
+            self.builder.get_drives(drivetype, drivesize),
+            detailsfunc=detailsfunc
+            )
+
         
 
+        
+        
 if __name__ == '__main__':
     b = BuilderUI()
     b.do_build()

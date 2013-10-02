@@ -23,7 +23,6 @@ from urllib2 import build_opener, HTTPCookieProcessor
 import logging
 from HTMLParser import HTMLParser
 
-import mechanize
 
 from bs4 import BeautifulSoup
 

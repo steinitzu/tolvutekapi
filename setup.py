@@ -26,7 +26,7 @@ setup(
     author_email='steinitzu@gmail.com',
     url='https://github.com/steinitzu/humblebee',
     license='MIT',
-
+    install_requires=['beautifulsoup4'],
     packages=[
         'tolvutek', 
         ]
